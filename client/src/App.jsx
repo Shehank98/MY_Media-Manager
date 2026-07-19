@@ -3,7 +3,8 @@ import {
   Home, PenSquare, Calendar, BarChart2, Settings,
   Send, Copy, Check, RefreshCw, Loader2, AlertCircle,
   ThumbsUp, MessageCircle, Share2, Eye, ChevronRight, Clock,
-  Newspaper, Zap, HelpCircle, Gift, Star, Users, Plus, Trash2, Sparkles
+  Newspaper, Zap, HelpCircle, Gift, Star, Users, Plus, Trash2, Sparkles,
+  Image as ImageIcon, X
 } from "lucide-react";
 import { api } from "./api.js";
 
@@ -79,6 +80,9 @@ export default function App() {
   const [generating, setGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [headline, setHeadline] = useState("");
+  const [image, setImage] = useState(null); // base64 data URL of creative
+  const [makingImage, setMakingImage] = useState(false);
 
   // ── Posts + analytics state ──
   const [posts, setPosts] = useState([]);
@@ -102,35 +106,48 @@ export default function App() {
   useEffect(() => { setPosts([]); setSummary(null); setAdvice(""); setGenerated(null); if (activeId) { loadPosts(); loadSummary(); } }, [activeId, loadPosts, loadSummary]);
 
   // ── Actions ──
+  function resetCreate() { setGenerated(null); setHeadline(""); setImage(null); }
+
   async function generate() {
     if (!activeId) return notify("err", "Add a page first (Settings).");
-    setGenerating(true); setGenerated(null);
+    setGenerating(true); resetCreate();
     try {
-      const { content } = await api.generate({ page_id: activeId, type: postType, extra });
+      const { content, headline } = await api.generate({ page_id: activeId, type: postType, extra });
       setGenerated({ content, type: postType });
+      setHeadline(headline || "");
     } catch (e) { notify("err", e.message); }
     finally { setGenerating(false); }
+  }
+
+  async function makeImage() {
+    if (!headline.trim()) return notify("err", "Add a short headline for the image first.");
+    setMakingImage(true);
+    try {
+      const { image } = await api.creativePreview({ page_id: activeId, headline, type: generated?.type || postType });
+      setImage(image);
+    } catch (e) { notify("err", e.message); }
+    finally { setMakingImage(false); }
   }
 
   async function publishNow(content, type, existingId) {
     setBusy(true);
     try {
       let id = existingId;
-      if (!id) { const saved = await api.savePost({ page_id: activeId, content, type }); id = saved.id; }
+      if (!id) { const saved = await api.savePost({ page_id: activeId, content, type, image }); id = saved.id; }
       await api.publishPost(id);
       notify("ok", "Published to Facebook! ✅");
-      setGenerated(null); loadPosts(); loadSummary();
+      resetCreate(); loadPosts(); loadSummary();
     } catch (e) { notify("err", e.message); }
     finally { setBusy(false); }
   }
 
   async function saveDraft(content, type) {
-    try { await api.savePost({ page_id: activeId, content, type, status: "draft" }); notify("ok", "Draft saved."); setGenerated(null); loadPosts(); }
+    try { await api.savePost({ page_id: activeId, content, type, status: "draft", image }); notify("ok", "Draft saved."); resetCreate(); loadPosts(); }
     catch (e) { notify("err", e.message); }
   }
 
   async function schedule(content, type, whenISO) {
-    try { await api.savePost({ page_id: activeId, content, type, status: "scheduled", scheduled_for: whenISO }); notify("ok", "Post scheduled ⏰"); setGenerated(null); loadPosts(); }
+    try { await api.savePost({ page_id: activeId, content, type, status: "scheduled", scheduled_for: whenISO, image }); notify("ok", "Post scheduled ⏰"); resetCreate(); loadPosts(); }
     catch (e) { notify("err", e.message); }
   }
 
@@ -237,6 +254,27 @@ export default function App() {
           <div style={{ padding: 16, background: C.paper }}>
             <pre style={{ fontSize: 13, color: C.body, whiteSpace: "pre-wrap", fontFamily: "inherit", lineHeight: 1.65, margin: 0 }}>{generated.content}</pre>
           </div>
+
+          {/* Creative image section */}
+          <div style={{ padding: "12px 16px", borderTop: `1px solid ${C.border}` }}>
+            <label style={{ fontSize: 12, fontWeight: 700, color: C.muted, letterSpacing: .4, textTransform: "uppercase" }}>Image headline</label>
+            <input value={headline} onChange={(e) => setHeadline(e.target.value)} placeholder="Short English headline for the poster"
+              style={{ ...inputStyle, marginTop: 6, marginBottom: 8 }} />
+            <button onClick={makeImage} disabled={makingImage} style={{ ...btnGhost, width: "100%", justifyContent: "center" }}>
+              {makingImage ? <><Loader2 size={14} className="spin" />Designing…</> : <><ImageIcon size={14} />{image ? "Regenerate image" : "Create branded image"}</>}
+            </button>
+            {image && (
+              <div style={{ marginTop: 10, position: "relative" }}>
+                <img src={image} alt="creative" style={{ width: "100%", borderRadius: 10, display: "block" }} />
+                <button onClick={() => setImage(null)} title="Remove image"
+                  style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,.6)", color: "white", border: "none", borderRadius: 8, width: 28, height: 28, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <X size={16} />
+                </button>
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>This image will be posted with the text above as the caption.</div>
+              </div>
+            )}
+          </div>
+
           <div style={{ padding: "12px 16px", display: "flex", gap: 8, borderTop: `1px solid ${C.border}`, flexWrap: "wrap" }}>
             <button onClick={() => publishNow(generated.content, generated.type)} disabled={busy} style={{ ...btnAmber, flex: 1 }}>
               {busy ? <><Loader2 size={14} className="spin" />Posting…</> : <><Send size={14} />Post Now</>}
@@ -503,6 +541,10 @@ function PostCard({ p, onPublish, onDelete, busy, showStatsOnly }) {
             : new Date(p.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
         </span>
       </div>
+      {p.has_image && (
+        <img src={`/api/posts/${p.id}/image`} alt="creative" loading="lazy"
+          style={{ width: "100%", borderRadius: 8, marginBottom: 8, display: "block" }} />
+      )}
       <div style={{ fontSize: 13, color: C.body, marginBottom: 8, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical" }}>{p.content || "(No text)"}</div>
       {p.status === "failed" && <div style={{ fontSize: 11, color: C.red, marginBottom: 6 }}>⚠️ {p.error}</div>}
       {p.status === "published" && <Engagement likes={p.likes} comments={p.comments} shares={p.shares} reach={p.reach} />}

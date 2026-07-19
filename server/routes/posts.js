@@ -2,9 +2,22 @@ import { Router } from "express";
 import { query } from "../db.js";
 import { ah } from "../util.js";
 import { loadPage } from "./pages.js";
-import { publishPost, getPostStats } from "../services/facebook.js";
+import { publishPost, publishPhoto, getPostStats } from "../services/facebook.js";
 
 const router = Router();
+
+// Parse a base64 data URL ("data:image/png;base64,...") into bytes + mime.
+function parseImage(dataUrl) {
+  if (!dataUrl) return null;
+  const m = /^data:(image\/[\w+.-]+);base64,(.+)$/s.exec(String(dataUrl));
+  if (!m) return null;
+  return { mime: m[1], buf: Buffer.from(m[2], "base64") };
+}
+
+// Columns returned to the client for a post (never the raw image bytes).
+const POST_COLS = `p.id, p.page_id, p.type, p.content, p.status, p.scheduled_for,
+  p.fb_post_id, p.error, p.published_at, p.created_at,
+  (p.image IS NOT NULL) AS has_image`;
 
 // List posts for a page, newest first, with their latest stats.
 router.get("/", ah(async (req, res) => {
@@ -14,7 +27,7 @@ router.get("/", ah(async (req, res) => {
   let where = "p.page_id = $1";
   if (status) { params.push(status); where += ` AND p.status = $2`; }
   const { rows } = await query(
-    `SELECT p.*,
+    `SELECT ${POST_COLS},
             COALESCE(s.likes,0) likes, COALESCE(s.comments,0) comments,
             COALESCE(s.shares,0) shares, s.reach, s.impressions
        FROM posts p
@@ -28,18 +41,30 @@ router.get("/", ah(async (req, res) => {
   res.json(rows);
 }));
 
+// Serve a stored creative image.
+router.get("/:id/image", ah(async (req, res) => {
+  const { rows } = await query("SELECT image, image_mime FROM posts WHERE id = $1", [req.params.id]);
+  if (!rows[0] || !rows[0].image) return res.status(404).end();
+  res.set("Content-Type", rows[0].image_mime || "image/png");
+  res.set("Cache-Control", "public, max-age=86400");
+  res.send(rows[0].image);
+}));
+
 // Save a draft OR schedule a post. status: 'draft' | 'scheduled'
+// Optional `image` is a base64 data URL of a creative to attach.
 router.post("/", ah(async (req, res) => {
-  const { page_id, content, type, status = "draft", scheduled_for } = req.body || {};
+  const { page_id, content, type, status = "draft", scheduled_for, image } = req.body || {};
   if (!page_id || !content)
     return res.status(400).json({ error: "page_id and content are required." });
   if (status === "scheduled" && !scheduled_for)
     return res.status(400).json({ error: "scheduled_for is required to schedule." });
 
+  const img = parseImage(image);
   const { rows } = await query(
-    `INSERT INTO posts (page_id, type, content, status, scheduled_for)
-     VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-    [page_id, type || null, content, status, scheduled_for || null]
+    `INSERT INTO posts (page_id, type, content, status, scheduled_for, image, image_mime)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)
+     RETURNING ${POST_COLS.replace(/p\./g, "")}`,
+    [page_id, type || null, content, status, scheduled_for || null, img?.buf || null, img?.mime || null]
   );
   res.status(201).json(rows[0]);
 }));
@@ -73,10 +98,13 @@ router.post("/:id/publish", ah(async (req, res) => {
   if (!page) return res.status(404).json({ error: "Page not found." });
 
   try {
-    const result = await publishPost(page.fb_page_id, page.access_token, post.content);
+    // If the post has a creative image, publish it as a photo; otherwise text.
+    const result = post.image
+      ? await publishPhoto(page.fb_page_id, page.access_token, post.content, post.image)
+      : await publishPost(page.fb_page_id, page.access_token, post.content);
     const { rows: upd } = await query(
       `UPDATE posts SET status='published', fb_post_id=$1, published_at=now(), error=NULL
-       WHERE id=$2 RETURNING *`,
+       WHERE id=$2 RETURNING ${POST_COLS.replace(/p\./g, "")}`,
       [result.id, post.id]
     );
     // Seed an initial stats row.

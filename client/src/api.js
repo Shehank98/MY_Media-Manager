@@ -25,6 +25,7 @@ export const api = {
   postTypes: () => req("/generate/types"),
   generate: (body) => req("/generate", { method: "POST", body }),
   advice: (page_id) => req("/generate/advice", { method: "POST", body: { page_id } }),
+  creativePreview: (body) => req("/creative/preview", { method: "POST", body }),
 
   // Posts
   listPosts: (page_id, status) =>

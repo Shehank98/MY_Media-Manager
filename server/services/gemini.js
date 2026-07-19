@@ -72,7 +72,10 @@ ${website ? `Website: ${website}` : ""}
 Write ONE Facebook post of type: ${pt.label} — ${pt.desc}.
 ${extra ? `Extra context from the owner: ${extra}` : ""}
 
-Rules:
+First output a headline for the post's image on ONE line, exactly like this:
+HEADLINE: <a short punchy ENGLISH headline, max 7 words, no emoji, Title Case>
+
+Then a blank line, then the post itself with these rules:
 - Write in BOTH languages if the audience is bilingual (${langs}). Put Sinhala first, then English.
 - Separate the two languages with this exact line: ═══════════════════
 - Keep it under 120 words total.
@@ -82,7 +85,17 @@ ${website ? `- End with a clear call to action pointing to: ${website}` : "- End
 - Sound organic and human, not like a corporate ad.
 - Include a question or relatable hook to encourage comments.
 
-Return ONLY the post text. No preamble, no explanation, no markdown fences.`;
+No preamble, no explanation, no markdown fences.`;
+}
+
+// Split the "HEADLINE: ..." first line out of the model's output.
+function splitHeadline(raw) {
+  const text = raw.trim();
+  const m = text.match(/^\s*HEADLINE:\s*(.+?)\s*(?:\n|$)/i);
+  if (!m) return { headline: "", content: text };
+  const headline = m[1].replace(/^["'“”]|["'“”]$/g, "").trim();
+  const content = text.slice(m.index + m[0].length).trim();
+  return { headline, content: content || text };
 }
 
 export async function generatePost(page, typeId, extra = "") {
@@ -96,7 +109,8 @@ export async function generatePost(page, typeId, extra = "") {
   }
 
   const prompt = buildPrompt(page, typeId, extra);
-  return callGemini(key, prompt, { temperature: 0.9, maxOutputTokens: 1024 });
+  const raw = await callGemini(key, prompt, { temperature: 0.9, maxOutputTokens: 1024 });
+  return splitHeadline(raw);
 }
 
 // Media-manager advice: looks at recent post performance and suggests

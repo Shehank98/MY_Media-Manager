@@ -12,6 +12,7 @@ Everything is stored in **PostgreSQL** and runs on **Railway**.
 
 - **Multiple pages** — add AdSpot and your other pages; switch between them from the top.
 - **AI post writing** — pick a post type, and Google Gemini (free) writes a bilingual post.
+- **Branded creative images** — generate a poster-style graphic (your brand colours, headline, and call-to-action) for a post, rendered server-side for free and published as a Facebook photo with the bilingual text as the caption.
 - **Publish or schedule** — post now, or auto-publish in 2 days / any time you pick.
 - **Analytics** — pull your real page likes, followers, and per-post likes/comments/shares from Facebook, stored so you can see trends.
 - **Media-manager advice** — the AI looks at what performed best and tells you what to post next.

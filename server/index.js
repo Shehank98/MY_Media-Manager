@@ -11,6 +11,7 @@ import pagesRouter from "./routes/pages.js";
 import generateRouter from "./routes/generate.js";
 import postsRouter from "./routes/posts.js";
 import analyticsRouter from "./routes/analytics.js";
+import creativeRouter from "./routes/creative.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -31,6 +32,7 @@ app.use("/api/pages", pagesRouter);
 app.use("/api/generate", generateRouter);
 app.use("/api/posts", postsRouter);
 app.use("/api/analytics", analyticsRouter);
+app.use("/api/creative", creativeRouter);
 
 // Central error handler: any error thrown/rejected in a route lands here and
 // returns clean JSON instead of hanging the request (which shows up as a 502).

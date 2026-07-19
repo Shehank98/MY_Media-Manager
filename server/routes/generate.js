@@ -12,13 +12,15 @@ router.get("/types", (_req, res) => {
 });
 
 // Generate a bilingual post for a page. Does NOT publish or save.
+// Returns { content, headline, type } — headline is a short English hook for
+// the creative image.
 router.post("/", ah(async (req, res) => {
   const { page_id, type = "promo", extra = "" } = req.body || {};
   const page = await loadPage(page_id);
   if (!page) return res.status(404).json({ error: "Page not found." });
   try {
-    const content = await generatePost(page, type, extra);
-    res.json({ content, type });
+    const { content, headline } = await generatePost(page, type, extra);
+    res.json({ content, headline, type });
   } catch (e) {
     res.status(e.code === "NO_KEY" ? 400 : 502).json({ error: e.message });
   }

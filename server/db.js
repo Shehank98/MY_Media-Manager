@@ -90,6 +90,11 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_posts_status ON posts(status);
     CREATE INDEX IF NOT EXISTS idx_post_stats_post ON post_stats(post_id);
     CREATE INDEX IF NOT EXISTS idx_page_stats_page ON page_stats(page_id);
+
+    -- Migrations for existing databases (safe to run every start):
+    ALTER TABLE posts ADD COLUMN IF NOT EXISTS image BYTEA;
+    ALTER TABLE posts ADD COLUMN IF NOT EXISTS image_mime TEXT;
+    ALTER TABLE pages ADD COLUMN IF NOT EXISTS logo_url TEXT;
   `);
   console.log("✅ Database schema ready.");
 }

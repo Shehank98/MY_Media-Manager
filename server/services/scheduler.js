@@ -1,7 +1,7 @@
 import cron from "node-cron";
 import { query } from "../db.js";
 import { decrypt } from "./crypto.js";
-import { publishPost, getPostStats, getPageInfo } from "./facebook.js";
+import { publishPost, publishPhoto, getPostStats, getPageInfo } from "./facebook.js";
 
 // Publishes any scheduled post whose time has arrived, and periodically
 // refreshes stats so the dashboard shows how reach grows over time.
@@ -17,7 +17,9 @@ async function publishDuePosts() {
   for (const post of rows) {
     const token = decrypt(post.access_token);
     try {
-      const result = await publishPost(post.fb_page_id, token, post.content);
+      const result = post.image
+        ? await publishPhoto(post.fb_page_id, token, post.content, post.image)
+        : await publishPost(post.fb_page_id, token, post.content);
       await query(
         `UPDATE posts SET status='published', fb_post_id=$1, published_at=now(), error=NULL WHERE id=$2`,
         [result.id, post.id]

@@ -56,6 +56,33 @@ export async function publishPost(pageId, token, message) {
   return result;
 }
 
+// Publish a PHOTO post to the page with a caption. `buffer` is PNG/JPEG bytes.
+// Returns { id (photo id), post_id }. We use post_id for stats where available.
+export async function publishPhoto(pageId, token, caption, buffer) {
+  const form = new FormData();
+  form.append("caption", caption ?? "");
+  form.append("access_token", token);
+  form.append("source", new Blob([buffer], { type: "image/png" }), "creative.png");
+
+  const res = await fetch(`${GRAPH}/${pageId}/photos`, {
+    method: "POST",
+    body: form,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (data.error) {
+    const err = new Error(data.error.message || "Facebook photo upload failed");
+    err.fb = data.error;
+    throw err;
+  }
+  if (!res.ok || !(data.post_id || data.id)) {
+    throw new Error(
+      "Facebook did not confirm the photo post. Check the token has pages_manage_posts."
+    );
+  }
+  // For photo posts, post_id is the feed story we can read stats from.
+  return { id: data.post_id || data.id, photo_id: data.id };
+}
+
 // Recent posts with engagement counts.
 export async function getPagePosts(pageId, token, limit = 15) {
   const data = await graph(`${pageId}/posts`, {
