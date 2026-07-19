@@ -417,6 +417,13 @@ export default function App() {
                 <div style={{ fontSize: 11, color: C.muted }}>ID {p.fb_page_id}{p.website ? ` · ${p.website}` : ""}</div>
               </div>
               {activeId === p.id && <Pill color={C.green}>Active</Pill>}
+              <button onClick={async () => {
+                notify("ok", "Testing connection…");
+                try {
+                  const r = await api.diagnosePage(p.id);
+                  notify(r.ok ? "ok" : "err", r.checks.map((c) => `${c.ok ? "✅" : "❌"} ${c.label}`).join("\n"));
+                } catch (e) { notify("err", e.message); }
+              }} style={{ fontSize: 12, background: "none", border: `1px solid ${C.border}`, borderRadius: 8, padding: "5px 10px", cursor: "pointer", color: C.navy }}>Test</button>
               <button onClick={async () => { if (confirm(`Remove ${p.name}? This deletes its stored posts/stats (not from Facebook).`)) { await api.deletePage(p.id); if (activeId === p.id) setActiveId(null); loadPages(); } }} style={{ background: "none", border: "none", cursor: "pointer", color: C.red }}><Trash2 size={16} /></button>
             </div>
           ))}
@@ -507,8 +514,8 @@ export default function App() {
 
         {toast && (
           <div className="content" style={{ paddingBottom: 0, paddingTop: 10 }}>
-            <div style={{ background: (toast.type === "ok" ? C.green : C.red) + "15", border: `1px solid ${(toast.type === "ok" ? C.green : C.red)}40`, borderRadius: 10, padding: "10px 14px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: toast.type === "ok" ? C.green : C.red }}>
-              <AlertCircle size={14} />{toast.msg}
+            <div style={{ background: (toast.type === "ok" ? C.green : C.red) + "15", border: `1px solid ${(toast.type === "ok" ? C.green : C.red)}40`, borderRadius: 10, padding: "10px 14px", display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, color: toast.type === "ok" ? C.green : C.red, whiteSpace: "pre-line" }}>
+              <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 2 }} />{toast.msg}
             </div>
           </div>
         )}

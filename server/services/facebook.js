@@ -76,6 +76,12 @@ export async function getLongLivedPageTokens(appId, appSecret, userToken) {
   return pages;
 }
 
+// Who does this token belong to? For a Page token, /me returns the Page; for a
+// User token, /me returns the person — this is how we detect a wrong token type.
+export async function whoAmI(token) {
+  return graph("me", { token, params: { fields: "id,name" } });
+}
+
 // Verify a token + page and return the page's public info.
 export async function getPageInfo(pageId, token) {
   return graph(pageId, {

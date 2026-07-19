@@ -21,6 +21,7 @@ export const api = {
   tokenTool: (body) => req("/pages/token-tool", { method: "POST", body }),
   updatePage: (id, body) => req(`/pages/${id}`, { method: "PATCH", body }),
   learnFromWebsite: (id, website) => req(`/pages/${id}/learn`, { method: "POST", body: { website } }),
+  diagnosePage: (id) => req(`/pages/${id}/diagnose`, { method: "POST" }),
   deletePage: (id) => req(`/pages/${id}`, { method: "DELETE" }),
 
   // Generation

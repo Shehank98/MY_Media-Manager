@@ -2,7 +2,7 @@ import { Router } from "express";
 import { query } from "../db.js";
 import { ah } from "../util.js";
 import { encrypt, decrypt } from "../services/crypto.js";
-import { getPageInfo, getLongLivedPageTokens } from "../services/facebook.js";
+import { getPageInfo, getLongLivedPageTokens, whoAmI } from "../services/facebook.js";
 import { fetchWebsiteText } from "../services/website.js";
 import { summarizeBusiness } from "../services/gemini.js";
 
@@ -142,6 +142,44 @@ router.post("/:id/learn", ah(async (req, res) => {
     [about, website, page.id]
   );
   res.json(rows[0]);
+}));
+
+// Diagnose a page's saved token: is it valid, is it a Page token (not a User
+// token), and can it read the page? Returns human-readable checks.
+router.post("/:id/diagnose", ah(async (req, res) => {
+  const page = await loadPage(req.params.id);
+  if (!page) return res.status(404).json({ error: "Page not found." });
+
+  const checks = [];
+  let tokenType = "unknown";
+
+  // 1. Who owns this token?
+  try {
+    const me = await whoAmI(page.access_token);
+    if (String(me.id) === String(page.fb_page_id)) {
+      tokenType = "page";
+      checks.push({ ok: true, label: `Saved token is a Page token for "${me.name}". ✅` });
+    } else {
+      tokenType = "user";
+      checks.push({
+        ok: false,
+        label: `Saved token belongs to "${me.name}" (a personal/User token), NOT the Page. Use “Get a never-expiring token” above to connect the Page token.`,
+      });
+    }
+  } catch (e) {
+    checks.push({ ok: false, label: `Token is invalid or expired: ${e.message}` });
+  }
+
+  // 2. Can it read the page?
+  try {
+    const pg = await getPageInfo(page.fb_page_id, page.access_token);
+    checks.push({ ok: true, label: `Can read the page: ${pg.name} (${pg.fan_count ?? 0} likes). ✅` });
+  } catch (e) {
+    checks.push({ ok: false, label: `Cannot read the page: ${e.message}` });
+  }
+
+  const ok = checks.every((c) => c.ok);
+  res.json({ ok, tokenType, checks });
 }));
 
 // Remove a page (cascades to its posts + stats).
