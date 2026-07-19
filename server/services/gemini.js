@@ -101,6 +101,65 @@ function splitHeadline(raw) {
   return { headline, content: content || text };
 }
 
+const stripSite = (s) =>
+  String(s).toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/+$/, "").trim();
+
+// Fallback headline derived from the post text, so the image headline is never
+// empty even if the model forgets the HEADLINE line.
+function deriveHeadline(content, page) {
+  let text = content;
+  const parts = content.split(/═{3,}/); // prefer the English section
+  if (parts.length > 1) text = parts[parts.length - 1];
+  text = text
+    .replace(/https?:\S+/g, " ")
+    .replace(/#\S+/g, " ")
+    .replace(/[^\x00-\x7F]/g, " ") // drop Sinhala + emoji for a clean Latin headline
+    .replace(/\s+/g, " ")
+    .trim();
+  const words = text.split(" ").filter(Boolean).slice(0, 7);
+  let h = words.join(" ").replace(/[.,:;!?-]+$/, "");
+  if (!h) h = page.name || "Book Your Ad Today";
+  return h.replace(/^\w/, (c) => c.toUpperCase()).slice(0, 60);
+}
+
+// Insert `block` just before any trailing hashtag line (so hashtags stay last).
+function insertBeforeHashtags(content, block) {
+  const lines = content.split("\n");
+  let i = lines.length - 1;
+  while (i >= 0 && lines[i].trim() === "") i--;
+  const isHashtagLine =
+    i >= 0 && /#\w/.test(lines[i]) &&
+    lines[i].trim().split(/\s+/).every((w) => w === "" || w.startsWith("#"));
+  if (isHashtagLine) lines.splice(i, 0, block, "");
+  else lines.push(block);
+  return lines.join("\n");
+}
+
+// Guarantee the website + contact details are present in the caption. If the
+// model already included them, do nothing; otherwise append them.
+function ensureContactWebsite(content, page) {
+  const website = (page.website || "").trim();
+  const contact = (page.contact || "").trim();
+  const missing = [];
+
+  if (website) {
+    const dom = stripSite(website);
+    if (dom && !stripSite(content).includes(dom)) missing.push(`🌐 ${website}`);
+  }
+  if (contact) {
+    const cDigits = contact.replace(/\D/g, "");
+    const emails = contact.match(/[\w.+-]+@[\w.-]+/g) || [];
+    const outDigits = content.replace(/\D/g, "");
+    const present =
+      (cDigits.length >= 7 && outDigits.includes(cDigits.slice(0, 9))) ||
+      emails.some((e) => content.includes(e));
+    if (!present) missing.push(contact);
+  }
+
+  if (!missing.length) return content;
+  return insertBeforeHashtags(content, missing.join("\n"));
+}
+
 export async function generatePost(page, typeId, extra = "") {
   const key = process.env.GEMINI_API_KEY;
   if (!key) {
@@ -113,7 +172,13 @@ export async function generatePost(page, typeId, extra = "") {
 
   const prompt = buildPrompt(page, typeId, extra);
   const raw = await callGemini(key, prompt, { temperature: 0.9, maxOutputTokens: 1024 });
-  return splitHeadline(raw);
+  const { headline, content } = splitHeadline(raw);
+  return {
+    // Never return an empty headline — auto-derive one if the model omitted it.
+    headline: headline || deriveHeadline(content, page),
+    // Guarantee website + contact are in every caption.
+    content: ensureContactWebsite(content, page),
+  };
 }
 
 // Summarise a business from its website text, for use as the page's "about"
