@@ -19,6 +19,7 @@ export const api = {
   listPages: () => req("/pages"),
   addPage: (body) => req("/pages", { method: "POST", body }),
   updatePage: (id, body) => req(`/pages/${id}`, { method: "PATCH", body }),
+  learnFromWebsite: (id, website) => req(`/pages/${id}/learn`, { method: "POST", body: { website } }),
   deletePage: (id) => req(`/pages/${id}`, { method: "DELETE" }),
 
   // Generation

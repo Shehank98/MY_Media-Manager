@@ -95,6 +95,7 @@ export async function initDb() {
     ALTER TABLE posts ADD COLUMN IF NOT EXISTS image BYTEA;
     ALTER TABLE posts ADD COLUMN IF NOT EXISTS image_mime TEXT;
     ALTER TABLE pages ADD COLUMN IF NOT EXISTS logo_url TEXT;
+    ALTER TABLE pages ADD COLUMN IF NOT EXISTS contact TEXT;
   `);
   console.log("✅ Database schema ready.");
 }

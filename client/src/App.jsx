@@ -403,6 +403,8 @@ export default function App() {
           <button onClick={add} disabled={adding} style={{ ...btnGreen, marginTop: 12 }}>{adding ? "Connecting…" : "Save & Connect Page"}</button>
         </Card>
 
+        {active && <BusinessProfile page={active} onSaved={loadPages} notify={notify} />}
+
         <Card>
           <Label>Your Pages ({pages.length})</Label>
           {pages.length === 0 && <div style={{ fontSize: 13, color: C.muted }}>No pages yet.</div>}
@@ -529,6 +531,73 @@ export default function App() {
 }
 
 // ─── Sub-components ───────────────────────────────────────────────
+// Business profile: website + contact + AI summary that grounds every post.
+function BusinessProfile({ page, onSaved, notify }) {
+  const [website, setWebsite] = useState(page.website || "");
+  const [contact, setContact] = useState(page.contact || "");
+  const [about, setAbout] = useState(page.about || "");
+  const [learning, setLearning] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Reset fields when the active page changes.
+  useEffect(() => {
+    setWebsite(page.website || ""); setContact(page.contact || ""); setAbout(page.about || "");
+  }, [page.id]); // eslint-disable-line
+
+  async function learn() {
+    if (!website.trim()) return notify("err", "Enter your website first.");
+    setLearning(true);
+    try {
+      const updated = await api.learnFromWebsite(page.id, website.trim());
+      setAbout(updated.about || "");
+      notify("ok", "Learned your business from the website ✅");
+      onSaved && onSaved();
+    } catch (e) { notify("err", e.message); }
+    finally { setLearning(false); }
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      await api.updatePage(page.id, { website: website.trim(), contact, about });
+      notify("ok", "Business profile saved.");
+      onSaved && onSaved();
+    } catch (e) { notify("err", e.message); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <Card>
+      <Label>Business Profile — {page.name}</Label>
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 10, lineHeight: 1.5 }}>
+        This tells the AI what your business is, so every post is accurate and ends with your website, contact, and hashtags.
+      </div>
+
+      <label style={{ fontSize: 12, fontWeight: 600, color: C.body }}>Website</label>
+      <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+        <input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="www.adspotmedia.lk" style={{ ...inputStyle, flex: 1 }} />
+        <button onClick={learn} disabled={learning} style={{ ...btnGhost, whiteSpace: "nowrap" }}>
+          {learning ? <><Loader2 size={14} className="spin" />Reading…</> : <><Sparkles size={14} />Learn</>}
+        </button>
+      </div>
+
+      <label style={{ fontSize: 12, fontWeight: 600, color: C.body, display: "block", marginTop: 12 }}>Contact details (added to every post)</label>
+      <textarea value={contact} onChange={(e) => setContact(e.target.value)}
+        placeholder={"📞 077 123 4567\n💬 WhatsApp: 077 123 4567\n✉️ hello@adspotmedia.lk"}
+        style={{ ...inputStyle, height: 76, resize: "none", marginTop: 6, whiteSpace: "pre-wrap" }} />
+
+      <label style={{ fontSize: 12, fontWeight: 600, color: C.body, display: "block", marginTop: 12 }}>
+        Business summary <span style={{ color: C.muted, fontWeight: 400 }}>(auto-filled by “Learn”, or edit yourself)</span>
+      </label>
+      <textarea value={about} onChange={(e) => setAbout(e.target.value)}
+        placeholder="What your business does — the AI uses this for every post."
+        style={{ ...inputStyle, height: 120, resize: "vertical", marginTop: 6 }} />
+
+      <button onClick={save} disabled={saving} style={{ ...btnGreen, marginTop: 12 }}>{saving ? "Saving…" : "Save Business Profile"}</button>
+    </Card>
+  );
+}
+
 function PostCard({ p, onPublish, onDelete, busy, showStatsOnly }) {
   const statusColor = { published: C.green, scheduled: C.amber, draft: C.muted, failed: C.red }[p.status] || C.muted;
   return (

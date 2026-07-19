@@ -3,6 +3,8 @@ import { query } from "../db.js";
 import { ah } from "../util.js";
 import { encrypt, decrypt } from "../services/crypto.js";
 import { getPageInfo } from "../services/facebook.js";
+import { fetchWebsiteText } from "../services/website.js";
+import { summarizeBusiness } from "../services/gemini.js";
 
 const router = Router();
 
@@ -18,7 +20,7 @@ export async function loadPage(id) {
 // List all managed pages (tokens never returned to the client).
 router.get("/", ah(async (_req, res) => {
   const { rows } = await query(
-    "SELECT id, name, fb_page_id, website, about, languages, created_at FROM pages ORDER BY created_at ASC"
+    "SELECT id, name, fb_page_id, website, about, contact, languages, created_at FROM pages ORDER BY created_at ASC"
   );
   res.json(rows);
 }));
@@ -51,7 +53,7 @@ router.post("/", ah(async (req, res) => {
            website = COALESCE(EXCLUDED.website, pages.website),
            about = COALESCE(EXCLUDED.about, pages.about),
            languages = COALESCE(EXCLUDED.languages, pages.languages)
-     RETURNING id, name, fb_page_id, website, about, languages, created_at`,
+     RETURNING id, name, fb_page_id, website, about, contact, languages, created_at`,
     [
       info.name || "Untitled Page",
       fb_page_id,
@@ -66,22 +68,62 @@ router.post("/", ah(async (req, res) => {
 
 // Update editable fields (website, about, languages) or refresh the token.
 router.patch("/:id", ah(async (req, res) => {
-  const { website, about, languages, access_token } = req.body || {};
+  const { website, about, contact, languages, access_token } = req.body || {};
   const fields = [];
   const vals = [];
   let i = 1;
   if (website !== undefined) { fields.push(`website = $${i++}`); vals.push(website); }
   if (about !== undefined) { fields.push(`about = $${i++}`); vals.push(about); }
+  if (contact !== undefined) { fields.push(`contact = $${i++}`); vals.push(contact); }
   if (languages !== undefined) { fields.push(`languages = $${i++}`); vals.push(languages); }
   if (access_token) { fields.push(`access_token = $${i++}`); vals.push(encrypt(access_token)); }
   if (!fields.length) return res.status(400).json({ error: "Nothing to update." });
   vals.push(req.params.id);
   const { rows } = await query(
     `UPDATE pages SET ${fields.join(", ")} WHERE id = $${i}
-     RETURNING id, name, fb_page_id, website, about, languages, created_at`,
+     RETURNING id, name, fb_page_id, website, about, contact, languages, created_at`,
     vals
   );
   if (!rows[0]) return res.status(404).json({ error: "Page not found." });
+  res.json(rows[0]);
+}));
+
+// Read the page's website, summarise the business with Gemini, and save it as
+// the page's "about" so every generated post is grounded in it.
+// Optionally accepts { website } in the body to set/override first.
+router.post("/:id/learn", ah(async (req, res) => {
+  const page = await loadPage(req.params.id);
+  if (!page) return res.status(404).json({ error: "Page not found." });
+
+  const website = (req.body?.website || page.website || "").trim();
+  if (!website)
+    return res.status(400).json({ error: "Set a website for this page first." });
+
+  let fetched;
+  try {
+    fetched = await fetchWebsiteText(website);
+  } catch (e) {
+    return res.status(502).json({ error: e.message });
+  }
+  if (!fetched.text || fetched.text.length < 40) {
+    return res.status(422).json({
+      error:
+        "Couldn't read enough text from the website (it may be JavaScript-only). You can paste your business summary manually instead.",
+    });
+  }
+
+  let about;
+  try {
+    about = await summarizeBusiness({ url: fetched.url, text: fetched.text, pageName: page.name });
+  } catch (e) {
+    return res.status(e.code === "NO_KEY" ? 400 : 502).json({ error: e.message });
+  }
+
+  const { rows } = await query(
+    `UPDATE pages SET about = $1, website = $2 WHERE id = $3
+     RETURNING id, name, fb_page_id, website, about, contact, languages, created_at`,
+    [about, website, page.id]
+  );
   res.json(rows[0]);
 }));
 

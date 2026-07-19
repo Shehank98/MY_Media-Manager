@@ -62,12 +62,15 @@ function buildPrompt(page, typeId, extra) {
   const about =
     page.about ||
     `${page.name} is a Sri Lankan business Facebook page.`;
+  const contact = (page.contact || "").trim();
 
   return `You are the Facebook content manager for "${page.name}".
 
-About the page/business:
+=== WHAT THIS BUSINESS IS (base every post on this — do not invent services) ===
 ${about}
 ${website ? `Website: ${website}` : ""}
+${contact ? `Contact details:\n${contact}` : ""}
+=== END BUSINESS INFO ===
 
 Write ONE Facebook post of type: ${pt.label} — ${pt.desc}.
 ${extra ? `Extra context from the owner: ${extra}` : ""}
@@ -75,17 +78,17 @@ ${extra ? `Extra context from the owner: ${extra}` : ""}
 First output a headline for the post's image on ONE line, exactly like this:
 HEADLINE: <a short punchy ENGLISH headline, max 7 words, no emoji, Title Case>
 
-Then a blank line, then the post itself with these rules:
-- Write in BOTH languages if the audience is bilingual (${langs}). Put Sinhala first, then English.
+Then a blank line, then the COMPLETE post. The post must:
+- Be accurate to the business info above — never mention services it doesn't offer.
+- Be written in BOTH languages if the audience is bilingual (${langs}). Sinhala first, then English.
 - Separate the two languages with this exact line: ═══════════════════
-- Keep it under 120 words total.
-- Use 3-5 natural emojis.
-${website ? `- End with a clear call to action pointing to: ${website}` : "- End with a clear call to action."}
-- Add 5-7 relevant hashtags mixing local and English terms.
-- Sound organic and human, not like a corporate ad.
+- Use 4-6 natural emojis and sound organic and human, not like a corporate ad.
 - Include a question or relatable hook to encourage comments.
+- Then finish with a clear closing block IN THIS ORDER:
+    1. A call to action.${website ? `\n    2. The website: ${website}` : ""}${contact ? `\n    3. The contact details exactly as given above.` : ""}
+    ${website || contact ? "4." : "2."} 5-7 relevant hashtags on the last line, mixing local and English terms (e.g. #AdSpotLK #NewspaperAds).
 
-No preamble, no explanation, no markdown fences.`;
+Return the full caption ready to publish. No preamble, no explanation, no markdown fences.`;
 }
 
 // Split the "HEADLINE: ..." first line out of the model's output.
@@ -111,6 +114,32 @@ export async function generatePost(page, typeId, extra = "") {
   const prompt = buildPrompt(page, typeId, extra);
   const raw = await callGemini(key, prompt, { temperature: 0.9, maxOutputTokens: 1024 });
   return splitHeadline(raw);
+}
+
+// Summarise a business from its website text, for use as the page's "about"
+// context that grounds every generated post.
+export async function summarizeBusiness({ url, text, pageName }) {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) {
+    const err = new Error("GEMINI_API_KEY is not set.");
+    err.code = "NO_KEY";
+    throw err;
+  }
+  const prompt = `Below is the text scraped from the website of a business (${url || "unknown URL"})${pageName ? ` whose Facebook page is "${pageName}"` : ""}.
+
+Write a clear, factual profile of this business for its social media manager to use when writing posts. Cover, only using what's in the text:
+- What the business does and its main service(s)
+- Who the customers are
+- Key selling points / how it works
+- Any newspapers, publications, products, or packages mentioned
+- Its tagline if any
+
+Write 4-7 sentences of plain prose (no headings, no bullet symbols). Do not invent anything not supported by the text.
+
+WEBSITE TEXT:
+${String(text || "").slice(0, 7000)}`;
+
+  return callGemini(key, prompt, { temperature: 0.3, maxOutputTokens: 600 });
 }
 
 // Media-manager advice: looks at recent post performance and suggests
