@@ -19,7 +19,12 @@ async function graph(path, { method = "GET", token, body, params = {} } = {}) {
   const res = await fetchWithTimeout(url, opts, 25000);
   const data = await res.json().catch(() => ({}));
   if (data.error) {
-    const msg = data.error.message || "Facebook API error";
+    let msg = data.error.message || "Facebook API error";
+    // Translate the classic "wrong token type" error into plain guidance.
+    if (/publish_actions|(\(#200\))/i.test(msg) || data.error.code === 200) {
+      msg =
+        "This looks like a personal (User) token, not a Page token. In Settings, use “Get a never-expiring token” to connect your Page's token, then try again.";
+    }
     const err = new Error(msg);
     err.fb = data.error;
     throw err;
