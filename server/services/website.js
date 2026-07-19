@@ -28,6 +28,11 @@ export async function fetchWebsiteText(rawUrl) {
     clearTimeout(timer);
   }
 
+  if (res.status === 401 || res.status === 403) {
+    throw new Error(
+      `${url} blocked our reader (HTTP ${res.status}) — many sites block automated requests. Paste your business summary into the box manually instead.`
+    );
+  }
   if (!res.ok) throw new Error(`Website returned HTTP ${res.status} for ${url}.`);
 
   const html = await res.text();

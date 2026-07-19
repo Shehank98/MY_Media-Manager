@@ -103,7 +103,7 @@ router.post("/:id/learn", ah(async (req, res) => {
   try {
     fetched = await fetchWebsiteText(website);
   } catch (e) {
-    return res.status(502).json({ error: e.message });
+    return res.status(424).json({ error: e.message });
   }
   if (!fetched.text || fetched.text.length < 40) {
     return res.status(422).json({
@@ -116,7 +116,7 @@ router.post("/:id/learn", ah(async (req, res) => {
   try {
     about = await summarizeBusiness({ url: fetched.url, text: fetched.text, pageName: page.name });
   } catch (e) {
-    return res.status(e.code === "NO_KEY" ? 400 : 502).json({ error: e.message });
+    return res.status(e.code === "NO_KEY" ? 400 : 424).json({ error: e.message });
   }
 
   const { rows } = await query(

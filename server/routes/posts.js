@@ -122,7 +122,8 @@ router.post("/:id/publish", ah(async (req, res) => {
       e.message,
       post.id,
     ]);
-    res.status(502).json({ error: e.message });
+    // 424 = the upstream (Facebook) refused the publish; not a server crash.
+    res.status(424).json({ error: e.message });
   }
 }));
 

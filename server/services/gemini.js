@@ -1,6 +1,8 @@
 // Content generation using Google Gemini's free tier.
 // Get a free key at https://aistudio.google.com/app/apikey and set GEMINI_API_KEY.
 
+import { fetchWithTimeout } from "../util.js";
+
 // Models are tried in order until one works. If GEMINI_MODEL is set, it's tried
 // first. Using a "-latest" alias + concrete fallbacks means a single model being
 // retired (as gemini-2.0-flash was) won't break the app.
@@ -26,14 +28,14 @@ async function callGemini(key, prompt, generationConfig) {
     }
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: gcfg,
       }),
-    });
+    }, 45000);
     const data = await res.json().catch(() => ({}));
 
     if (res.ok && !data.error) {

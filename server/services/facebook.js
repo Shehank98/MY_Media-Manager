@@ -1,6 +1,8 @@
 // Thin wrapper around the Facebook Graph API.
 // All calls are server-side so page access tokens never reach the browser.
 
+import { fetchWithTimeout } from "../util.js";
+
 const GRAPH = "https://graph.facebook.com/v19.0";
 
 async function graph(path, { method = "GET", token, body, params = {} } = {}) {
@@ -14,7 +16,7 @@ async function graph(path, { method = "GET", token, body, params = {} } = {}) {
     opts.body = JSON.stringify({ ...body, access_token: token });
   }
 
-  const res = await fetch(url, opts);
+  const res = await fetchWithTimeout(url, opts, 25000);
   const data = await res.json().catch(() => ({}));
   if (data.error) {
     const msg = data.error.message || "Facebook API error";
@@ -64,10 +66,10 @@ export async function publishPhoto(pageId, token, caption, buffer) {
   form.append("access_token", token);
   form.append("source", new Blob([buffer], { type: "image/png" }), "creative.png");
 
-  const res = await fetch(`${GRAPH}/${pageId}/photos`, {
+  const res = await fetchWithTimeout(`${GRAPH}/${pageId}/photos`, {
     method: "POST",
     body: form,
-  });
+  }, 30000);
   const data = await res.json().catch(() => ({}));
   if (data.error) {
     const err = new Error(data.error.message || "Facebook photo upload failed");

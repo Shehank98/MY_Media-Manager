@@ -57,7 +57,7 @@ export default function App() {
 
   const active = pages.find((p) => p.id === activeId) || null;
 
-  const notify = (type, msg) => { setToast({ type, msg }); setTimeout(() => setToast(null), 4000); };
+  const notify = (type, msg) => { setToast({ type, msg }); setTimeout(() => setToast(null), type === "err" ? 9000 : 4000); };
 
   const loadPages = useCallback(async () => {
     try {

@@ -22,7 +22,7 @@ router.post("/", ah(async (req, res) => {
     const { content, headline } = await generatePost(page, type, extra);
     res.json({ content, headline, type });
   } catch (e) {
-    res.status(e.code === "NO_KEY" ? 400 : 502).json({ error: e.message });
+    res.status(e.code === "NO_KEY" ? 400 : 424).json({ error: e.message });
   }
 }));
 
@@ -50,7 +50,7 @@ router.post("/advice", ah(async (req, res) => {
     const advice = await generateAdvice(page, rows);
     res.json({ advice });
   } catch (e) {
-    res.status(e.code === "NO_KEY" ? 400 : 502).json({ error: e.message });
+    res.status(e.code === "NO_KEY" ? 400 : 424).json({ error: e.message });
   }
 }));
 
