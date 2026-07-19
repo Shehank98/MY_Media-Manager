@@ -2,7 +2,7 @@ import { Router } from "express";
 import { query } from "../db.js";
 import { ah } from "../util.js";
 import { encrypt, decrypt } from "../services/crypto.js";
-import { getPageInfo } from "../services/facebook.js";
+import { getPageInfo, getLongLivedPageTokens } from "../services/facebook.js";
 import { fetchWebsiteText } from "../services/website.js";
 import { summarizeBusiness } from "../services/gemini.js";
 
@@ -16,6 +16,23 @@ export async function loadPage(id) {
   page.access_token = decrypt(page.access_token);
   return page;
 }
+
+// Token helper: exchange a short-lived user token for never-expiring Page
+// tokens. The App Secret is used transiently and never stored.
+router.post("/token-tool", ah(async (req, res) => {
+  const { app_id, app_secret, user_token } = req.body || {};
+  if (!app_id || !app_secret || !user_token) {
+    return res
+      .status(400)
+      .json({ error: "App ID, App Secret and the short-lived token are all required." });
+  }
+  try {
+    const pages = await getLongLivedPageTokens(app_id.trim(), app_secret.trim(), user_token.trim());
+    res.json({ pages });
+  } catch (e) {
+    res.status(424).json({ error: e.message });
+  }
+}));
 
 // List all managed pages (tokens never returned to the client).
 router.get("/", ah(async (_req, res) => {

@@ -32,6 +32,45 @@ async function graph(path, { method = "GET", token, body, params = {} } = {}) {
   return data;
 }
 
+// Turn a short-lived user token into never-expiring Page tokens.
+// 1) exchange the user token for a long-lived one, 2) read the user's pages —
+// each page's access_token derived from a long-lived user token does not expire.
+export async function getLongLivedPageTokens(appId, appSecret, userToken) {
+  let longToken = userToken;
+  try {
+    const ex = await graph("oauth/access_token", {
+      params: {
+        grant_type: "fb_exchange_token",
+        client_id: appId,
+        client_secret: appSecret,
+        fb_exchange_token: userToken,
+      },
+    });
+    if (ex.access_token) longToken = ex.access_token;
+  } catch (e) {
+    // If the exchange itself is rejected, surface a clear reason.
+    throw new Error(
+      `Couldn't extend the token: ${e.message.replace(/\.\s*$/, "")}. Check the App ID / App Secret and that the token is a User token.`
+    );
+  }
+
+  const accts = await graph("me/accounts", {
+    token: longToken,
+    params: { fields: "id,name,access_token" },
+  });
+  const pages = (accts.data || []).map((p) => ({
+    id: p.id,
+    name: p.name,
+    access_token: p.access_token,
+  }));
+  if (!pages.length) {
+    throw new Error(
+      "No Pages found for this token. Make sure you granted pages_show_list + pages_manage_posts and that you manage the Page."
+    );
+  }
+  return pages;
+}
+
 // Verify a token + page and return the page's public info.
 export async function getPageInfo(pageId, token) {
   return graph(pageId, {

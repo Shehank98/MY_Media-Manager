@@ -391,11 +391,13 @@ export default function App() {
               <div style={{ fontSize: 12, color: "#A0B0C0", lineHeight: 1.5 }}>{s}</div>
             </div>
           ))}
-          <div style={{ marginTop: 8, fontSize: 11, color: C.amber + "99" }}>Tip: use a long-lived Page token so it doesn’t expire in a few hours.</div>
+          <div style={{ marginTop: 8, fontSize: 11, color: C.amber + "99" }}>Tip: use the helper below to get a token that never expires.</div>
         </Card>
 
+        <TokenTool onSaved={loadPages} setActive={setActiveId} notify={notify} />
+
         <Card>
-          <Label>Add a Page</Label>
+          <Label>Add a Page manually</Label>
           <input placeholder="Facebook Page ID" value={form.fb_page_id} onChange={(e) => setForm({ ...form, fb_page_id: e.target.value })} style={inputStyle} />
           <input type="password" placeholder="Page Access Token" value={form.access_token} onChange={(e) => setForm({ ...form, access_token: e.target.value })} style={{ ...inputStyle, marginTop: 8 }} />
           <input placeholder="Website (optional) e.g. adspot.lk" value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} style={{ ...inputStyle, marginTop: 8 }} />
@@ -531,6 +533,69 @@ export default function App() {
 }
 
 // ─── Sub-components ───────────────────────────────────────────────
+// Token helper: turns a short-lived user token into never-expiring Page tokens.
+function TokenTool({ onSaved, setActive, notify }) {
+  const [f, setF] = useState({ app_id: "", app_secret: "", user_token: "" });
+  const [pages, setPages] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [savingId, setSavingId] = useState(null);
+
+  async function run() {
+    if (!f.app_id || !f.app_secret || !f.user_token) return notify("err", "Fill App ID, App Secret and the token.");
+    setLoading(true); setPages([]);
+    try {
+      const { pages } = await api.tokenTool(f);
+      setPages(pages);
+      notify("ok", `Found ${pages.length} page(s) with never-expiring tokens ✅`);
+    } catch (e) { notify("err", e.message); }
+    finally { setLoading(false); }
+  }
+
+  async function connect(p) {
+    setSavingId(p.id);
+    try {
+      const saved = await api.addPage({ fb_page_id: p.id, access_token: p.access_token });
+      notify("ok", `Connected ${saved.name} — token won't expire ✅`);
+      await onSaved(); setActive(saved.id);
+    } catch (e) { notify("err", e.message); }
+    finally { setSavingId(null); }
+  }
+
+  return (
+    <Card style={{ border: `2px solid ${C.amber}` }}>
+      <Label>🔓 Get a never-expiring token (recommended)</Label>
+      <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 10 }}>
+        No expiry headaches. <b>App ID</b> and <b>App Secret</b> are in your app at
+        developers.facebook.com → Settings → Basic. The <b>short token</b> is from Graph API Explorer
+        (Generate User Access Token with <i>pages_show_list, pages_manage_posts, pages_read_engagement</i>).
+      </div>
+      <input placeholder="App ID" value={f.app_id} onChange={(e) => setF({ ...f, app_id: e.target.value })} style={inputStyle} />
+      <input type="password" placeholder="App Secret" value={f.app_secret} onChange={(e) => setF({ ...f, app_secret: e.target.value })} style={{ ...inputStyle, marginTop: 8 }} />
+      <input type="password" placeholder="Short-lived token (from Graph API Explorer)" value={f.user_token} onChange={(e) => setF({ ...f, user_token: e.target.value })} style={{ ...inputStyle, marginTop: 8 }} />
+      <button onClick={run} disabled={loading} style={{ ...btnAmber, marginTop: 12 }}>
+        {loading ? <><Loader2 size={14} className="spin" />Working…</> : <><Sparkles size={14} />Get never-expiring token</>}
+      </button>
+
+      {pages.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <Label>Your Pages — tap to connect</Label>
+          {pages.map((p) => (
+            <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.body }}>{p.name}</div>
+                <div style={{ fontSize: 11, color: C.muted }}>ID {p.id}</div>
+              </div>
+              <button onClick={() => connect(p)} disabled={savingId === p.id} style={{ fontSize: 12, background: C.green, color: "white", border: "none", borderRadius: 8, padding: "6px 12px", cursor: "pointer" }}>
+                {savingId === p.id ? "Connecting…" : "Connect"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 // Business profile: website + contact + AI summary that grounds every post.
 function BusinessProfile({ page, onSaved, notify }) {
   const [website, setWebsite] = useState(page.website || "");
