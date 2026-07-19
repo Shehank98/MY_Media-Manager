@@ -1,7 +1,49 @@
 // Content generation using Google Gemini's free tier.
 // Get a free key at https://aistudio.google.com/app/apikey and set GEMINI_API_KEY.
 
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+// Models are tried in order until one works. If GEMINI_MODEL is set, it's tried
+// first. Using a "-latest" alias + concrete fallbacks means a single model being
+// retired (as gemini-2.0-flash was) won't break the app.
+const MODELS = [
+  process.env.GEMINI_MODEL,
+  "gemini-flash-latest",
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
+].filter(Boolean);
+
+// Calls Gemini's generateContent, walking through MODELS. A "model not found /
+// not supported" error moves on to the next model; any other error stops.
+async function callGemini(key, prompt, generationConfig) {
+  let lastErr;
+  for (const model of MODELS) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (res.ok && !data.error) {
+      const text =
+        data.candidates?.[0]?.content?.parts?.map((p) => p.text).join("") || "";
+      if (!text.trim()) throw new Error("Gemini returned an empty response. Try again.");
+      return text.trim();
+    }
+
+    const msg = data.error?.message || `Gemini error (HTTP ${res.status})`;
+    lastErr = new Error(msg);
+    // Only fall through to the next model when THIS model is unavailable.
+    const modelGone =
+      res.status === 404 ||
+      /not found|not supported|no longer available|is not available|does not exist/i.test(msg);
+    if (!modelGone) throw lastErr;
+  }
+  throw lastErr || new Error("No usable Gemini model.");
+}
 
 // Post types the media manager rotates through.
 export const POST_TYPES = {
@@ -54,26 +96,7 @@ export async function generatePost(page, typeId, extra = "") {
   }
 
   const prompt = buildPrompt(page, typeId, extra);
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${key}`;
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.9, maxOutputTokens: 1024 },
-    }),
-  });
-
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.error) {
-    throw new Error(data.error?.message || `Gemini error (HTTP ${res.status})`);
-  }
-
-  const text =
-    data.candidates?.[0]?.content?.parts?.map((p) => p.text).join("") || "";
-  if (!text.trim()) throw new Error("Gemini returned an empty post. Try again.");
-  return text.trim();
+  return callGemini(key, prompt, { temperature: 0.9, maxOutputTokens: 1024 });
 }
 
 // Media-manager advice: looks at recent post performance and suggests
@@ -105,20 +128,5 @@ Give the owner short, practical advice as their media manager. Cover:
 
 Be concise and friendly. Use simple English. Under 180 words.`;
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${key}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.7, maxOutputTokens: 700 },
-    }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.error) {
-    throw new Error(data.error?.message || `Gemini error (HTTP ${res.status})`);
-  }
-  return (
-    data.candidates?.[0]?.content?.parts?.map((p) => p.text).join("") || ""
-  ).trim();
+  return callGemini(key, prompt, { temperature: 0.7, maxOutputTokens: 700 });
 }
