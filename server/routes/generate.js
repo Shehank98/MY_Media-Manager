@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { loadPage } from "./pages.js";
+import { ah } from "../util.js";
 import { generatePost, generateAdvice, POST_TYPES } from "../services/gemini.js";
 import { query } from "../db.js";
 
@@ -7,13 +8,11 @@ const router = Router();
 
 // List available post types for the UI.
 router.get("/types", (_req, res) => {
-  res.json(
-    Object.entries(POST_TYPES).map(([id, v]) => ({ id, ...v }))
-  );
+  res.json(Object.entries(POST_TYPES).map(([id, v]) => ({ id, ...v })));
 });
 
 // Generate a bilingual post for a page. Does NOT publish or save.
-router.post("/", async (req, res) => {
+router.post("/", ah(async (req, res) => {
   const { page_id, type = "promo", extra = "" } = req.body || {};
   const page = await loadPage(page_id);
   if (!page) return res.status(404).json({ error: "Page not found." });
@@ -23,10 +22,10 @@ router.post("/", async (req, res) => {
   } catch (e) {
     res.status(e.code === "NO_KEY" ? 400 : 502).json({ error: e.message });
   }
-});
+}));
 
 // Media-manager advice based on recent post performance.
-router.post("/advice", async (req, res) => {
+router.post("/advice", ah(async (req, res) => {
   const { page_id } = req.body || {};
   const page = await loadPage(page_id);
   if (!page) return res.status(404).json({ error: "Page not found." });
@@ -51,6 +50,6 @@ router.post("/advice", async (req, res) => {
   } catch (e) {
     res.status(e.code === "NO_KEY" ? 400 : 502).json({ error: e.message });
   }
-});
+}));
 
 export default router;

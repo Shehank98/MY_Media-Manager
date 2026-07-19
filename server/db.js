@@ -11,15 +11,28 @@ if (!connectionString) {
   );
 }
 
+// Decide whether to use SSL.
+// - Railway's INTERNAL host (postgres.railway.internal) does NOT support SSL —
+//   forcing it there makes every connection fail. Default: no SSL.
+// - Railway's PUBLIC proxy hosts (*.proxy.rlwy.net / *.railway.app) require SSL.
+// - `sslmode=require` in the URL, or PGSSL=true, also turns it on.
+function resolveSsl(cs) {
+  if (!cs) return undefined;
+  if (process.env.PGSSL === "false") return undefined;
+  if (process.env.PGSSL === "true") return { rejectUnauthorized: false };
+  if (/sslmode=(require|verify-ca|verify-full)/.test(cs)) return { rejectUnauthorized: false };
+  if (cs.includes("proxy.rlwy.net") || cs.includes(".railway.app")) return { rejectUnauthorized: false };
+  return undefined; // internal Railway / local Postgres: no SSL
+}
+
 export const pool = new Pool({
   connectionString,
-  // Railway internal connections don't need SSL; external ones do.
-  ssl:
-    connectionString && connectionString.includes("railway")
-      ? { rejectUnauthorized: false }
-      : process.env.PGSSL === "true"
-      ? { rejectUnauthorized: false }
-      : undefined,
+  ssl: resolveSsl(connectionString),
+});
+
+// Surface pool-level errors instead of crashing the process.
+pool.on("error", (err) => {
+  console.error("⚠️  Postgres pool error:", err.message);
 });
 
 export async function query(text, params) {

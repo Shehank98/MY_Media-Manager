@@ -32,6 +32,25 @@ app.use("/api/generate", generateRouter);
 app.use("/api/posts", postsRouter);
 app.use("/api/analytics", analyticsRouter);
 
+// Central error handler: any error thrown/rejected in a route lands here and
+// returns clean JSON instead of hanging the request (which shows up as a 502).
+app.use("/api", (err, req, res, _next) => {
+  const msg = err?.message || "Server error";
+  const dbDown =
+    /ECONNREFUSED|ENOTFOUND|ETIMEDOUT|getaddrinfo|does not support SSL|SSL connection|password authentication|database .* does not exist|no pg_hba|Connection terminated|self.signed/i.test(
+      msg
+    );
+  if (dbDown) {
+    console.error("DB error:", msg);
+    return res.status(503).json({
+      error:
+        "Database not reachable. In Railway, add a PostgreSQL database and set DATABASE_URL (reference it as ${{Postgres.DATABASE_URL}}), then redeploy.",
+    });
+  }
+  console.error("API error:", msg);
+  res.status(500).json({ error: msg });
+});
+
 // Serve the built React frontend in production.
 const clientDist = path.join(__dirname, "..", "client", "dist");
 app.use(express.static(clientDist));

@@ -1,12 +1,13 @@
 import { Router } from "express";
 import { query } from "../db.js";
+import { ah } from "../util.js";
 import { loadPage } from "./pages.js";
 import { getPageInfo, getPostStats } from "../services/facebook.js";
 
 const router = Router();
 
 // Snapshot page + published-post stats from Facebook and store history.
-router.post("/refresh", async (req, res) => {
+router.post("/refresh", ah(async (req, res) => {
   const { page_id } = req.body || {};
   const page = await loadPage(page_id);
   if (!page) return res.status(404).json({ error: "Page not found." });
@@ -45,10 +46,10 @@ router.post("/refresh", async (req, res) => {
     }
   }
   res.json(out);
-});
+}));
 
 // Summary for the dashboard: latest page stats + totals + trend.
-router.get("/summary", async (req, res) => {
+router.get("/summary", ah(async (req, res) => {
   const { page_id } = req.query;
   if (!page_id) return res.status(400).json({ error: "page_id is required." });
 
@@ -91,6 +92,6 @@ router.get("/summary", async (req, res) => {
     counts: totals[0],
     engagement: engagement[0],
   });
-});
+}));
 
 export default router;

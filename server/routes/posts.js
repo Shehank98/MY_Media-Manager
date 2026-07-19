@@ -1,12 +1,13 @@
 import { Router } from "express";
 import { query } from "../db.js";
+import { ah } from "../util.js";
 import { loadPage } from "./pages.js";
 import { publishPost, getPostStats } from "../services/facebook.js";
 
 const router = Router();
 
 // List posts for a page, newest first, with their latest stats.
-router.get("/", async (req, res) => {
+router.get("/", ah(async (req, res) => {
   const { page_id, status } = req.query;
   if (!page_id) return res.status(400).json({ error: "page_id is required." });
   const params = [page_id];
@@ -25,10 +26,10 @@ router.get("/", async (req, res) => {
     params
   );
   res.json(rows);
-});
+}));
 
 // Save a draft OR schedule a post. status: 'draft' | 'scheduled'
-router.post("/", async (req, res) => {
+router.post("/", ah(async (req, res) => {
   const { page_id, content, type, status = "draft", scheduled_for } = req.body || {};
   if (!page_id || !content)
     return res.status(400).json({ error: "page_id and content are required." });
@@ -41,10 +42,10 @@ router.post("/", async (req, res) => {
     [page_id, type || null, content, status, scheduled_for || null]
   );
   res.status(201).json(rows[0]);
-});
+}));
 
 // Edit a stored draft/scheduled post.
-router.patch("/:id", async (req, res) => {
+router.patch("/:id", ah(async (req, res) => {
   const { content, type, status, scheduled_for } = req.body || {};
   const fields = [];
   const vals = [];
@@ -61,10 +62,10 @@ router.patch("/:id", async (req, res) => {
   );
   if (!rows[0]) return res.status(404).json({ error: "Post not found." });
   res.json(rows[0]);
-});
+}));
 
-// Publish a stored post (or a fresh one) to Facebook right now.
-router.post("/:id/publish", async (req, res) => {
+// Publish a stored post to Facebook right now.
+router.post("/:id/publish", ah(async (req, res) => {
   const { rows } = await query("SELECT * FROM posts WHERE id = $1", [req.params.id]);
   const post = rows[0];
   if (!post) return res.status(404).json({ error: "Post not found." });
@@ -95,12 +96,12 @@ router.post("/:id/publish", async (req, res) => {
     ]);
     res.status(502).json({ error: e.message });
   }
-});
+}));
 
 // Delete a post record (does not delete from Facebook).
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", ah(async (req, res) => {
   await query("DELETE FROM posts WHERE id = $1", [req.params.id]);
   res.json({ ok: true });
-});
+}));
 
 export default router;
