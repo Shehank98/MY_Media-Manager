@@ -16,21 +16,38 @@ const MODELS = [
 async function callGemini(key, prompt, generationConfig) {
   let lastErr;
   for (const model of MODELS) {
+    // Gemini 2.5 models "think" using the output-token budget, which can starve
+    // the actual answer and truncate captions. Disable thinking for these
+    // simple generation tasks so every token goes to the caption. (2.0 models
+    // don't accept this field, so only send it to 2.5 / -latest aliases.)
+    const gcfg = { ...generationConfig };
+    if (/2\.5|flash-latest|flash-lite-latest/i.test(model)) {
+      gcfg.thinkingConfig = { thinkingBudget: 0 };
+    }
+
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig,
+        generationConfig: gcfg,
       }),
     });
     const data = await res.json().catch(() => ({}));
 
     if (res.ok && !data.error) {
-      const text =
-        data.candidates?.[0]?.content?.parts?.map((p) => p.text).join("") || "";
-      if (!text.trim()) throw new Error("Gemini returned an empty response. Try again.");
+      const cand = data.candidates?.[0];
+      const text = cand?.content?.parts?.map((p) => p.text).join("") || "";
+      if (!text.trim()) {
+        // MAX_TOKENS with no text means the budget was too small — try the next
+        // model / surface a clear error rather than returning nothing.
+        if (cand?.finishReason === "MAX_TOKENS") {
+          lastErr = new Error("Gemini hit the token limit before writing. Try again.");
+          continue;
+        }
+        throw new Error("Gemini returned an empty response. Try again.");
+      }
       return text.trim();
     }
 
@@ -171,7 +188,9 @@ export async function generatePost(page, typeId, extra = "") {
   }
 
   const prompt = buildPrompt(page, typeId, extra);
-  const raw = await callGemini(key, prompt, { temperature: 0.9, maxOutputTokens: 1024 });
+  // Bilingual Sinhala+English + contact + hashtags is token-heavy; give plenty
+  // of headroom so the caption is never cut off mid-sentence.
+  const raw = await callGemini(key, prompt, { temperature: 0.9, maxOutputTokens: 2048 });
   const { headline, content } = splitHeadline(raw);
   return {
     // Never return an empty headline — auto-derive one if the model omitted it.
@@ -204,7 +223,7 @@ Write 4-7 sentences of plain prose (no headings, no bullet symbols). Do not inve
 WEBSITE TEXT:
 ${String(text || "").slice(0, 7000)}`;
 
-  return callGemini(key, prompt, { temperature: 0.3, maxOutputTokens: 600 });
+  return callGemini(key, prompt, { temperature: 0.3, maxOutputTokens: 1024 });
 }
 
 // Media-manager advice: looks at recent post performance and suggests
@@ -236,5 +255,5 @@ Give the owner short, practical advice as their media manager. Cover:
 
 Be concise and friendly. Use simple English. Under 180 words.`;
 
-  return callGemini(key, prompt, { temperature: 0.7, maxOutputTokens: 700 });
+  return callGemini(key, prompt, { temperature: 0.7, maxOutputTokens: 1024 });
 }
