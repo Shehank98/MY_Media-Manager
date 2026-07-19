@@ -180,7 +180,9 @@ export default function App() {
         {posts.length === 0 && !loadingPosts && (
           <div style={{ fontSize: 13, color: C.muted, textAlign: "center", padding: "20px 0" }}>No posts yet. Create your first one 👆</div>
         )}
-        {posts.map((p) => <PostCard key={p.id} p={p} onPublish={() => publishNow(p.content, p.type, p.id)} onDelete={async () => { await api.deletePost(p.id); loadPosts(); }} busy={busy} />)}
+        <div className="card-grid">
+          {posts.map((p) => <PostCard key={p.id} p={p} onPublish={() => publishNow(p.content, p.type, p.id)} onDelete={async () => { await api.deletePost(p.id); loadPosts(); }} busy={busy} />)}
+        </div>
       </>}
     </div>
   );
@@ -316,7 +318,9 @@ export default function App() {
         </Card>
 
         <Label>Recent Posts</Label>
-        {posts.filter(p => p.status === "published").map((p) => <PostCard key={p.id} p={p} showStatsOnly />)}
+        <div className="card-grid">
+          {posts.filter(p => p.status === "published").map((p) => <PostCard key={p.id} p={p} showStatsOnly />)}
+        </div>
       </>}
     </div>
   );
@@ -388,52 +392,99 @@ export default function App() {
   ];
   const TITLES = { home: "Dashboard", generate: "Create Post", plan: "Content Plan", stats: "Analytics", settings: "Settings" };
 
+  const PageSwitcher = ({ style }) =>
+    pages.length > 0 ? (
+      <select value={activeId || ""} onChange={(e) => setActiveId(Number(e.target.value))}
+        style={{ width: "100%", padding: "9px 12px", borderRadius: 10, border: "none", background: "#2A2A44", color: "white", fontSize: 13, fontWeight: 600, cursor: "pointer", ...style }}>
+        {pages.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+      </select>
+    ) : null;
+
+  const TabContent = () => (
+    <>
+      {tab === "home" && <TabHome />}
+      {tab === "generate" && <TabGenerate />}
+      {tab === "plan" && <TabPlan />}
+      {tab === "stats" && <TabStats />}
+      {tab === "settings" && <TabSettings />}
+    </>
+  );
+
   return (
-    <div style={{ maxWidth: 440, margin: "0 auto", background: C.paper, minHeight: "100vh", paddingBottom: 74, fontFamily: "system-ui,-apple-system,sans-serif" }}>
-      {/* Header + page switcher */}
-      <div style={{ background: C.navy, padding: "16px 16px 12px", position: "sticky", top: 0, zIndex: 10 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 38, height: 38, background: C.amber, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div className="shell" style={{ fontFamily: "system-ui,-apple-system,sans-serif" }}>
+      {/* ── Desktop sidebar ── */}
+      <aside className="sidebar">
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+          <div style={{ width: 38, height: 38, background: C.amber, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <Newspaper size={18} color={C.navy} />
           </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: "white" }}>{TITLES[tab]}</div>
-            <div style={{ fontSize: 11, color: "#6080A0" }}>My Media Manager</div>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "white" }}>Media Manager</div>
+            <div style={{ fontSize: 11, color: "#6080A0" }}>{active ? active.name : "No page yet"}</div>
           </div>
-          {active && <div style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 6, height: 6, borderRadius: "50%", background: C.green }} /><span style={{ fontSize: 10, color: C.green }}>Live</span></div>}
         </div>
-        {pages.length > 0 && (
-          <select value={activeId || ""} onChange={(e) => setActiveId(Number(e.target.value))}
-            style={{ marginTop: 12, width: "100%", padding: "9px 12px", borderRadius: 10, border: "none", background: "#2A2A44", color: "white", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-            {pages.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-        )}
-      </div>
-
-      {toast && (
-        <div style={{ margin: "10px 14px 0", background: (toast.type === "ok" ? C.green : C.red) + "15", border: `1px solid ${(toast.type === "ok" ? C.green : C.red)}40`, borderRadius: 10, padding: "10px 14px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: toast.type === "ok" ? C.green : C.red }}>
-          <AlertCircle size={14} />{toast.msg}
-        </div>
-      )}
-
-      <div style={{ padding: "14px 14px 0" }}>
-        {tab === "home" && <TabHome />}
-        {tab === "generate" && <TabGenerate />}
-        {tab === "plan" && <TabPlan />}
-        {tab === "stats" && <TabStats />}
-        {tab === "settings" && <TabSettings />}
-      </div>
-
-      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: C.white, borderTop: `1px solid ${C.border}`, zIndex: 20 }}>
-        <div style={{ maxWidth: 440, margin: "0 auto", display: "flex" }}>
-          {NAV.map((n) => (
-            <button key={n.id} onClick={() => setTab(n.id)} style={{ flex: 1, padding: "8px 0 10px", border: "none", background: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
-              <n.icon size={20} color={tab === n.id ? C.amber : C.muted} />
-              <span style={{ fontSize: 10, color: tab === n.id ? C.amber : C.muted, fontWeight: tab === n.id ? 700 : 400 }}>{n.label}</span>
-              {tab === n.id && <div style={{ width: 16, height: 2, background: C.amber, borderRadius: 1 }} />}
+        <PageSwitcher style={{ marginBottom: 14 }} />
+        {NAV.map((n) => {
+          const on = tab === n.id;
+          return (
+            <button key={n.id} onClick={() => setTab(n.id)}
+              style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 12px", border: "none", borderRadius: 10, cursor: "pointer", textAlign: "left",
+                background: on ? C.amber : "transparent", color: on ? C.navy : "#A0B0C0", fontWeight: on ? 700 : 500, fontSize: 14 }}>
+              <n.icon size={18} /> {n.label}
             </button>
-          ))}
+          );
+        })}
+        {active && (
+          <div style={{ marginTop: "auto", display: "flex", alignItems: "center", gap: 6, paddingTop: 16 }}>
+            <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.green }} />
+            <span style={{ fontSize: 11, color: C.green }}>Live</span>
+          </div>
+        )}
+      </aside>
+
+      <div className="main">
+        {/* ── Mobile header ── */}
+        <div className="mobile-header" style={{ background: C.navy, padding: "16px 16px 12px", position: "sticky", top: 0, zIndex: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 38, height: 38, background: C.amber, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Newspaper size={18} color={C.navy} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: "white" }}>{TITLES[tab]}</div>
+              <div style={{ fontSize: 11, color: "#6080A0" }}>My Media Manager</div>
+            </div>
+            {active && <div style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 6, height: 6, borderRadius: "50%", background: C.green }} /><span style={{ fontSize: 10, color: C.green }}>Live</span></div>}
+          </div>
+          <PageSwitcher style={{ marginTop: 12 }} />
         </div>
+
+        {/* ── Desktop top bar ── */}
+        <div className="desktop-topbar" style={{ alignItems: "center", justifyContent: "space-between", padding: "20px 32px 0" }}>
+          <div style={{ fontSize: 22, fontWeight: 800, color: C.navy }}>{TITLES[tab]}</div>
+        </div>
+
+        {toast && (
+          <div className="content" style={{ paddingBottom: 0, paddingTop: 10 }}>
+            <div style={{ background: (toast.type === "ok" ? C.green : C.red) + "15", border: `1px solid ${(toast.type === "ok" ? C.green : C.red)}40`, borderRadius: 10, padding: "10px 14px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: toast.type === "ok" ? C.green : C.red }}>
+              <AlertCircle size={14} />{toast.msg}
+            </div>
+          </div>
+        )}
+
+        <div className="content">
+          <TabContent />
+        </div>
+      </div>
+
+      {/* ── Mobile bottom nav ── */}
+      <div className="bottom-nav" style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: C.white, borderTop: `1px solid ${C.border}`, zIndex: 20 }}>
+        {NAV.map((n) => (
+          <button key={n.id} onClick={() => setTab(n.id)} style={{ flex: 1, padding: "8px 0 10px", border: "none", background: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+            <n.icon size={20} color={tab === n.id ? C.amber : C.muted} />
+            <span style={{ fontSize: 10, color: tab === n.id ? C.amber : C.muted, fontWeight: tab === n.id ? 700 : 400 }}>{n.label}</span>
+            {tab === n.id && <div style={{ width: 16, height: 2, background: C.amber, borderRadius: 1 }} />}
+          </button>
+        ))}
       </div>
     </div>
   );

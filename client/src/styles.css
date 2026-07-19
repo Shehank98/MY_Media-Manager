@@ -1,0 +1,73 @@
+/* Responsive shell: mobile-first phone layout that expands to a full
+   desktop web app (left sidebar + wide content) on larger screens. */
+
+* { box-sizing: border-box; }
+body { margin: 0; background: #F7F4EF; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 1s linear infinite; }
+
+.shell {
+  min-height: 100vh;
+  background: #F7F4EF;
+}
+
+/* Left sidebar — desktop only */
+.sidebar { display: none; }
+
+/* Main column */
+.main { min-height: 100vh; }
+
+/* Content wrapper */
+.content {
+  max-width: 460px;
+  margin: 0 auto;
+  padding: 14px 14px 90px;
+}
+
+/* Mobile top header (with page switcher) */
+.mobile-header { display: block; }
+
+/* Desktop top bar inside main */
+.desktop-topbar { display: none; }
+
+/* Bottom tab nav — mobile only */
+.bottom-nav { display: flex; }
+
+/* Grid that stacks on mobile, columns on desktop */
+.card-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+
+/* ── Desktop ─────────────────────────────────────────────── */
+@media (min-width: 820px) {
+  .shell { display: flex; }
+
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    width: 250px;
+    flex-shrink: 0;
+    min-height: 100vh;
+    position: sticky;
+    top: 0;
+    background: #1A1A2E;
+    padding: 20px 14px;
+    gap: 6px;
+  }
+
+  .main { flex: 1; min-width: 0; }
+
+  .mobile-header { display: none; }
+  .desktop-topbar { display: flex; }
+  .bottom-nav { display: none; }
+
+  .content {
+    max-width: 1040px;
+    margin: 0;
+    padding: 24px 32px 40px;
+  }
+
+  .card-grid { grid-template-columns: 1fr 1fr; }
+}
+
+@media (min-width: 1280px) {
+  .card-grid { grid-template-columns: 1fr 1fr 1fr; }
+}
