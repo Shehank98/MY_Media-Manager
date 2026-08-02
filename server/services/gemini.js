@@ -13,53 +13,68 @@ const MODELS = [
   "gemini-2.0-flash",
 ].filter(Boolean);
 
-// Calls Gemini's generateContent, walking through MODELS. A "model not found /
-// not supported" error moves on to the next model; any other error stops.
+// One HTTP call to a model. Returns { res, data }.
+async function callModel(key, model, prompt, generationConfig) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+  const res = await fetchWithTimeout(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig,
+    }),
+  }, 45000);
+  const data = await res.json().catch(() => ({}));
+  return { res, data };
+}
+
+// Calls Gemini's generateContent, walking through MODELS.
+// - A "model not found" error advances to the next model.
+// - Disabling "thinking" (to protect the token budget) is best-effort: if the
+//   model rejects thinkingConfig with an "invalid argument", we transparently
+//   retry the same model WITHOUT it, so generation never breaks over it.
 async function callGemini(key, prompt, generationConfig) {
   let lastErr;
   for (const model of MODELS) {
-    // Gemini 2.5 models "think" using the output-token budget, which can starve
-    // the actual answer and truncate captions. Disable thinking for these
-    // simple generation tasks so every token goes to the caption. (2.0 models
-    // don't accept this field, so only send it to 2.5 / -latest aliases.)
-    const gcfg = { ...generationConfig };
-    if (/2\.5|flash-latest|flash-lite-latest/i.test(model)) {
-      gcfg.thinkingConfig = { thinkingBudget: 0 };
-    }
+    // 2.5 models can waste the output budget "thinking"; try to turn it off,
+    // but fall back to a plain request if the field is rejected.
+    const supportsThinking = /2\.5|flash-latest|flash-lite-latest/i.test(model);
+    const configs = supportsThinking
+      ? [{ ...generationConfig, thinkingConfig: { thinkingBudget: 0 } }, { ...generationConfig }]
+      : [{ ...generationConfig }];
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
-    const res = await fetchWithTimeout(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: gcfg,
-      }),
-    }, 45000);
-    const data = await res.json().catch(() => ({}));
+    for (let i = 0; i < configs.length; i++) {
+      const { res, data } = await callModel(key, model, prompt, configs[i]);
 
-    if (res.ok && !data.error) {
-      const cand = data.candidates?.[0];
-      const text = cand?.content?.parts?.map((p) => p.text).join("") || "";
-      if (!text.trim()) {
-        // MAX_TOKENS with no text means the budget was too small — try the next
-        // model / surface a clear error rather than returning nothing.
-        if (cand?.finishReason === "MAX_TOKENS") {
-          lastErr = new Error("Gemini hit the token limit before writing. Try again.");
-          continue;
-        }
-        throw new Error("Gemini returned an empty response. Try again.");
+      if (res.ok && !data.error) {
+        const cand = data.candidates?.[0];
+        const text = cand?.content?.parts?.map((p) => p.text).join("") || "";
+        if (text.trim()) return text.trim();
+        // Empty: if we still have a plain retry left, take it; else next model.
+        lastErr = new Error(
+          cand?.finishReason === "MAX_TOKENS"
+            ? "Gemini hit the token limit before writing. Try again."
+            : "Gemini returned an empty response. Try again."
+        );
+        continue;
       }
-      return text.trim();
-    }
 
-    const msg = data.error?.message || `Gemini error (HTTP ${res.status})`;
-    lastErr = new Error(msg);
-    // Only fall through to the next model when THIS model is unavailable.
-    const modelGone =
-      res.status === 404 ||
-      /not found|not supported|no longer available|is not available|does not exist/i.test(msg);
-    if (!modelGone) throw lastErr;
+      const msg = data.error?.message || `Gemini error (HTTP ${res.status})`;
+      lastErr = new Error(msg);
+
+      const modelGone =
+        res.status === 404 ||
+        /not found|not supported|no longer available|is not available|does not exist/i.test(msg);
+      if (modelGone) break; // next model
+
+      // If the thinking setting was the problem, retry this model without it.
+      const thinkingRejected =
+        configs[i].thinkingConfig &&
+        /invalid argument|thinking|thinking_budget|thinkingconfig|400/i.test(msg);
+      if (thinkingRejected && i + 1 < configs.length) continue; // plain retry
+
+      throw lastErr; // a real error we shouldn't paper over
+    }
   }
   throw lastErr || new Error("No usable Gemini model.");
 }

@@ -4,7 +4,7 @@ import {
   Send, Copy, Check, RefreshCw, Loader2, AlertCircle,
   ThumbsUp, MessageCircle, Share2, Eye, ChevronRight, Clock,
   Newspaper, Zap, HelpCircle, Gift, Star, Users, Plus, Trash2, Sparkles,
-  Image as ImageIcon, X
+  Image as ImageIcon, X, Download
 } from "lucide-react";
 import { api } from "./api.js";
 
@@ -19,6 +19,16 @@ const TYPE_ICON = {
   promo: Zap, tip: Star, howto: HelpCircle,
   newspaper: Newspaper, seasonal: Gift, question: Users,
 };
+
+// Trigger a browser download of a base64 data-URL image.
+function downloadImage(dataUrl, name) {
+  const a = document.createElement("a");
+  a.href = dataUrl;
+  a.download = ((name || "adspot-post").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "adspot-post") + ".png";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
 
 // ─── Small components ─────────────────────────────────────────────
 const Pill = ({ children, color = C.amber }) => (
@@ -270,7 +280,10 @@ export default function App() {
                   style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,.6)", color: "white", border: "none", borderRadius: 8, width: 28, height: 28, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <X size={16} />
                 </button>
-                <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>This image will be posted with the text above as the caption.</div>
+                <button onClick={() => downloadImage(image, headline)} style={{ ...btnAmber, marginTop: 10 }}>
+                  <Download size={16} /> Download image
+                </button>
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>Download this image, copy the caption above, and upload both to Facebook.</div>
               </div>
             )}
           </div>
@@ -683,8 +696,14 @@ function PostCard({ p, onPublish, onDelete, busy, showStatsOnly }) {
         </span>
       </div>
       {p.has_image && (
-        <img src={`/api/posts/${p.id}/image`} alt="creative" loading="lazy"
-          style={{ width: "100%", borderRadius: 8, marginBottom: 8, display: "block" }} />
+        <div style={{ marginBottom: 8 }}>
+          <img src={`/api/posts/${p.id}/image`} alt="creative" loading="lazy"
+            style={{ width: "100%", borderRadius: 8, display: "block" }} />
+          <a href={`/api/posts/${p.id}/image`} download={`adspot-post-${p.id}.png`}
+            style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: C.amber, marginTop: 6, textDecoration: "none" }}>
+            <Download size={12} /> Download image
+          </a>
+        </div>
       )}
       <div style={{ fontSize: 13, color: C.body, marginBottom: 8, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical" }}>{p.content || "(No text)"}</div>
       {p.status === "failed" && <div style={{ fontSize: 11, color: C.red, marginBottom: 6 }}>⚠️ {p.error}</div>}
